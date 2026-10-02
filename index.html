@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>GranCyan 分享</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<style>
+  /* GranCyan 分享出来的对话：只读快照。数据在 Supabase，凭链接 # 后面的 id 走 get_share 取那一条。
+     深色、主题色跟着分享时 App 的 --accent。 */
+  :root { --bg:#0d0d10; --card:#16161b; --line:#2a2a31; --text:#e9e7e2; --muted:#8d8b93; --accent:#c89555; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--text); }
+  body { font:15px/1.7 'Noto Serif SC', 'Songti SC', SimSun, serif; }
+  .wrap { max-width:760px; margin:0 auto; padding:28px 16px 60px; }
+  header { margin-bottom:22px; padding-bottom:14px; border-bottom:1px solid var(--line); }
+  h1 { margin:0 0 4px; font-size:20px; font-weight:600; }
+  .meta { color:var(--muted); font-size:12px; }
+  .msg { display:flex; flex-direction:column; margin:14px 0; }
+  .msg.u { align-items:flex-end; }
+  .who { font-size:12px; color:var(--muted); margin:0 6px 4px; }
+  .msg.a .who { color:var(--accent); }
+  .bub { max-width:min(88%, 640px); padding:10px 14px; border-radius:14px; background:var(--card); border:1px solid var(--line); overflow-wrap:anywhere; }
+  .msg.u .bub { background:color-mix(in srgb, var(--accent) 16%, var(--card)); border-color:color-mix(in srgb, var(--accent) 40%, var(--line)); }
+  .bub > :first-child { margin-top:0; } .bub > :last-child { margin-bottom:0; }
+  .bub p { margin:.5em 0; }
+  .bub pre { overflow:auto; padding:10px; border-radius:8px; background:#0a0a0d; font-size:13px; }
+  .bub code { font-family:ui-monospace, Consolas, monospace; font-size:.9em; }
+  .bub blockquote { margin:.5em 0; padding-left:10px; border-left:3px solid var(--accent); color:#cfccc6; }
+  .bub img { max-width:100%; }
+  .bub a { color:var(--accent); }
+  .day { text-align:center; margin:22px 0 6px; font-size:11px; color:var(--muted); }
+  .state { margin-top:80px; text-align:center; color:var(--muted); }
+  footer { margin-top:36px; text-align:center; font-size:11px; color:var(--muted); }
+  @media (max-width:520px) { .bub { max-width:94%; } h1 { font-size:18px; } }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="state">加载中…</div></div>
+<script>
+(function () {
+  var URL_ = 'https://nzgcwyovmoppykvluxvs.supabase.co';
+  var KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56Z2N3eW92bW9wcHlrdmx1eHZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExNDA5ODksImV4cCI6MjA5NjcxNjk4OX0.p5UceEqX8JkrJjbInxwT97ghqvJSY2kOVbAlBxCfe8Q';
+  var app = document.getElementById('app');
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function state(t) { app.innerHTML = '<div class="state">' + esc(t) + '</div>'; }
+  // 对话内容是 AI 和人写的任意文字：markdown 渲染完一定过 DOMPurify，库没加载出来就退回纯文本
+  function md(t) {
+    try { if (window.marked && window.DOMPurify) return DOMPurify.sanitize(marked.parse(String(t), { breaks: true, gfm: true })); } catch (e) {}
+    return esc(t).replace(/\n/g, '<br>');
+  }
+  function okColor(c) { return /^#[0-9a-f]{3,8}$/i.test(c) || /^rgba?\([\d\s,.%]+\)$/i.test(c); }
+  function day(ts) { var d = new Date(ts); return isNaN(d) || !ts ? '' : d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日'; }
+  function hm(ts) { var d = new Date(ts); return isNaN(d) || !ts ? '' : String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+
+  var id = decodeURIComponent((location.hash || '').slice(1));
+  if (!/^[A-Za-z0-9]{6,32}$/.test(id)) return state('链接不完整');
+  fetch(URL_ + '/rest/v1/rpc/get_share', {
+    method: 'POST',
+    headers: { apikey: KEY, Authorization: 'Bearer ' + KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sid: id })
+  }).then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)); }).then(function (s) {
+    if (!s || !s.payload) return state('这条分享不存在，或者已经被撤回了');
+    var p = s.payload, msgs = Array.isArray(p.msgs) ? p.msgs : [];
+    if (p.accent && okColor(p.accent)) document.documentElement.style.setProperty('--accent', p.accent);
+    document.title = (p.title || '一段对话') + ' · GranCyan';
+    var h = '<header><h1>' + esc(p.title || '一段对话') + '</h1><div class="meta">' + msgs.length + ' 条 · 分享于 ' + esc(day(s.created_at)) + '</div></header>';
+    var lastDay = '';
+    msgs.forEach(function (m) {
+      var d = day(m.ts);
+      if (d && d !== lastDay) { h += '<div class="day">' + esc(d) + '</div>'; lastDay = d; }
+      var u = m.r === 'u';
+      h += '<div class="msg ' + (u ? 'u' : 'a') + '"><div class="who">' + esc(m.n || (u ? '我' : 'AI')) + (m.ts ? ' · ' + esc(hm(m.ts)) : '') + '</div>'
+        + '<div class="bub">' + md(m.t || '') + '</div></div>';
+    });
+    h += '<footer>由 GranCyan 分享 · 只读快照</footer>';
+    app.innerHTML = h;
+  }).catch(function (e) { state('加载失败（' + e.message + '），稍后再试'); });
+})();
+</script>
+</body>
+</html>
